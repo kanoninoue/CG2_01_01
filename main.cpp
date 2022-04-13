@@ -52,7 +52,7 @@ int  WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	MSG msg{}; //メッセージ
 
 	// DirectX初期化処理 ここから
-
+	HRESULT result;
 	//　DirectX初期化処理 ここまで
 
 	//ゲームループ
