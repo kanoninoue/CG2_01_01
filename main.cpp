@@ -232,29 +232,37 @@ int  WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 
 	//描画初期化処理
-	// 頂点データ
-	XMFLOAT3 vertices[] = {
-	{ -0.5f, -0.5f, 0.0f }, // 左下
-	{ -0.5f, +0.5f, 0.0f }, // 左上
-	{ +0.5f, -0.5f, 0.0f }, // 右下
+	// 頂点データ構造体
+
+	struct Vertex {
+		XMFLOAT3 pos; // xyz座標
+		XMFLOAT2 uv;  // uv座標
+	};
+
+	Vertex vertices[] = {
+    //x       y       z       u     v
+	{{ -0.4f, -0.7f, 0.0f },{0.0f, 1.0f}}, // 左下
+	{{ -0.4f, +0.7f, 0.0f },{0.0f, 0.0f}}, // 左上
+	{{ +0.4f, -0.7f, 0.0f },{1.0f, 0.0f}}, // 右下
 	//{ +0.5f, -0.5f, 0.0f }, // 右下
 	//{ -0.5f,  0.0f, 0.0f }, // 左中
 	//{ +0.5f,  0.0f, 0.0f }, // 右中
 	//{ -0.5f, +0.5f, 0.0f }, // 左上
-	{ +0.5f, +0.5f, 0.0f }, // 右上
+	{{ +0.4f, +0.7f, 0.0f },{1.0f,0.0f}}, // 右上
 	};
 
 	//インデックスデータ
-	uint16_t indices[] = {
-		0,1,2,
-		1,2,3,
+	unsigned short indices[] = {
+		0,1,2,//三角形1つ目
+		1,2,3,//三角形2つ目
 	};
 
-	 
+	//頂点データ全体のサイズ　= 頂点データ一つ分のサイズ * 頂点データの要素数
+	UINT sizeVB = static_cast<UINT>(sizeof(vertices[0]) * _countof(vertices));
+
 	
 
-	// 頂点データ全体のサイズ = 頂点データ一つ分のサイズ * 頂点データの要素数
-	UINT sizeVB = static_cast<UINT>(sizeof(XMFLOAT3) * _countof(vertices));
+	
 
 	// 頂点バッファの設定
 	D3D12_HEAP_PROPERTIES heapProp{}; // ヒープ設定
@@ -319,7 +327,7 @@ int  WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	assert(SUCCEEDED(result));
 
 	// GPU上のバッファに対応した仮想メモリ(メインメモリ上)を取得
-	XMFLOAT3* vertMap = nullptr;
+	Vertex* vertMap = nullptr;
 	result = vertBuff->Map(0, nullptr, (void**)&vertMap);
 	assert(SUCCEEDED(result));
 	// 全頂点に対して
@@ -336,7 +344,7 @@ int  WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// 頂点バッファのサイズ
 	vbView.SizeInBytes = sizeVB;
 	// 頂点1つ分のデータサイズ
-	vbView.StrideInBytes = sizeof(XMFLOAT3);
+	vbView.StrideInBytes = sizeof(vertices[0]);
 
 	ID3DBlob* vsBlob = nullptr; // 頂点シェーダオブジェクト
 	ID3DBlob* psBlob = nullptr; // ピクセルシェーダオブジェクト
@@ -395,9 +403,13 @@ int  WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0,
 	D3D12_APPEND_ALIGNED_ELEMENT,
 	D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0
-	}, // (1行で書いたほうが見やすい)
+	},
+	{"TEXCOORD",0,DXGI_FORMAT_R32G32_FLOAT,0,
+	 D3D12_APPEND_ALIGNED_ELEMENT,
+	 D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0
+	},// (1行で書いたほうが見やすい)
 	};
-
+	
 	// グラフィックスパイプライン設定
 	D3D12_GRAPHICS_PIPELINE_STATE_DESC pipelineDesc{};
 
@@ -429,9 +441,14 @@ int  WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	blenddesc.DestBlendAlpha = D3D12_BLEND_ZERO;
 
 	//加算合成
+	//blenddesc.BlendOp = D3D12_BLEND_OP_ADD; //加算
+	//blenddesc.SrcBlend = D3D12_BLEND_ONE;
+	//blenddesc.DestBlend = D3D12_BLEND_ONE;
+
+	//半透明合成
 	blenddesc.BlendOp = D3D12_BLEND_OP_ADD; //加算
-	blenddesc.SrcBlend = D3D12_BLEND_ONE;
-	blenddesc.DestBlend = D3D12_BLEND_ONE;
+	blenddesc.SrcBlend = D3D12_BLEND_SRC_ALPHA;
+	blenddesc.DestBlend = D3D12_BLEND_INV_SRC_ALPHA;
 
 	// 頂点レイアウトの設定
 	pipelineDesc.InputLayout.pInputElementDescs = inputLayout;
@@ -446,7 +463,8 @@ int  WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	pipelineDesc.SampleDesc.Count = 1; // 1ピクセルにつき1回サンプリング
 
 	//定数バッファ用データ構造体（マテリアル）
-	struct ConstBufferDataMaterial {
+	struct ConstBufferDataMaterial 
+	{
 		XMFLOAT4 color; //色(RGBA)
 	};
 
@@ -464,6 +482,7 @@ int  WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	cbResourceDesc.SampleDesc.Count = 1;
 	cbResourceDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
 
+	//GPUリソースの生成
 	ID3D12Resource* constBuffMaterial = nullptr;
 	//定数バッファの生成
 	result = device->CreateCommittedResource(
@@ -514,9 +533,8 @@ int  WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	result = device->CreateGraphicsPipelineState(&pipelineDesc, IID_PPV_ARGS(&pipelineState));
 	assert(SUCCEEDED(result));
 
-    
-
-
+	
+	
 
 	//　DirectX初期化処理 ここまで
 
